@@ -1,0 +1,143 @@
+---
+title: "A brief look into how different type of storm event had negative effects on the US population health and economy"
+author: "Khoa Tran"
+date: "18/07/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Synopsis
+ - This is a analysis base on the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database.
+ - This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+ - The goal of this project is to find out that which types of events  are most harmful with respect to population health and economic 
+ - After analysis, we find out that tornado cause the most injuries and fatalities across the USA over the year. In the econmic side, flood had the most effect on property damage, meanwhile, drought was the the leading event in crop damage. In both property and crop, flood caused the most total damage .
+ 
+## Data Processing
+This part is provide the download link and library need for the analysis
+
+```{r message = FALSE}
+library(dplyr)
+```
+
+```{r }
+# check if the file is downloaded, and create the needed directory
+if(!file.exists("Data")){dir.create("Data")}
+fileName <- "repdata_data_StormData.csv.bz2"
+path <- getwd()
+if(!file.exists(paste(path,"/Data","/",fileName,sep = ""))){
+        url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+        download.file(url,destfile = paste(path,"/Data","/",fileName,sep = "")) }
+
+# load in the dataset
+StormData <- read.csv("./Data/repdata_data_StormData.csv.bz2")
+
+str(StormData)
+summary(StormData)
+```
+
+## Results
+```{r}
+# First we look at how differnt event effect the fatalies and injuries rate
+
+# Subset out the INJURIES and FATALITIES group by different type of event by sum them together
+TypeVsFatal <- with(StormData,aggregate(FATALITIES,list(EVTYPE), FUN = sum))
+TypeVsInju <- with(StormData,aggregate(INJURIES,list(EVTYPE), FUN = sum))
+
+names(TypeVsFatal) <- c("EVTYPE","FATALITIES")
+names(TypeVsInju) <- c("EVTYPE","INJURIES")
+
+# Sort them in decreasing order
+TypeVsFatal <- arrange(TypeVsFatal,desc(FATALITIES))
+TypeVsInju <- arrange(TypeVsInju,desc(INJURIES))
+
+head(TypeVsFatal,5)
+head(TypeVsInju,5)
+
+
+# show the top 10 event that cause the most fatalities and injuries
+par(mfrow=c(1,2),mar=c(12,5,5,2))
+
+with(TypeVsFatal,barplot(head(FATALITIES,10),names.arg = head(EVTYPE,10), las = 2, main = "Top 10 most fatalities"))
+
+with(TypeVsInju,barplot(head(INJURIES,10),names.arg = head(EVTYPE,10), las = 2,main = "Top 10 most injuries"))
+
+```
+
+```{r}
+# Now we look at how diffent event has diffent economic consequences
+
+# Subset out the needed figures
+# PROPDMG is the property damage that the event cause, PROPDMGEXP is its unit in dollar
+# CROPDMG is the crop damage that the event cause, CROPDMGEXP is its unit in dollar
+EconDamage <- StormData[c("EVTYPE","PROPDMG", "PROPDMGEXP","CROPDMG","CROPDMGEXP")]
+
+# The unit is has many differences string input so we need a convert them 
+unique(EconDamage$PROPDMGEXP)
+unique(EconDamage$CROPDMGEXP)
+
+Converter <- function(df){
+        df[df == "K"] <- 1e3
+        df[df == "M"] <- 1e6
+        df[df == ""] <- 0
+        df[df == "B"] <- 1e9
+        df[df == "m"] <- 1e3
+        df[df == "+"] <- 0
+        df[df == "5"] <- 1e5
+        df[df == "6"] <- 1e6
+        df[df == "?"] <- 0
+        df[df == "4"] <- 1e4
+        df[df == "2"] <- 1e2
+        df[df == "3"] <- 1e3
+        df[df == "h"] <- 1e2
+        df[df == "H"] <- 1e2
+        df[df == "-"] <- 0
+        df[df == "1"] <- 1
+        df[df == "8"] <- 1e8
+        df[df == "k"] <- 1e3
+        return(as.numeric(df))}
+
+EconDamage$PROPDMGEXP<- Converter(EconDamage$PROPDMGEXP)
+EconDamage$CROPDMGEXP<- Converter(EconDamage$CROPDMGEXP)
+
+# Aggregate the damages by the different type of event in sum them together, also unify the damage with its unit by multiply them together 
+Propdamage <- with(EconDamage,aggregate(PROPDMG*PROPDMGEXP,list(EVTYPE),FUN = sum))
+
+Cropdamage <- with(EconDamage,aggregate(CROPDMG*CROPDMGEXP,list(EVTYPE),FUN = sum))
+
+names(Propdamage) <- c("EVTYPE","Damage")
+names(Cropdamage) <- c("EVTYPE","Damage")
+# Sort them in decreasing order
+Propdamage <- arrange(Propdamage,desc(Damage))
+Cropdamage <- arrange(Cropdamage,desc(Damage))
+
+head(Propdamage)
+head(Cropdamage)
+
+# show the top 10 event that cause the most property damage and crop damage
+par(mfrow=c(1,2),mar=c(12,5,8,2))
+
+with(Propdamage,barplot(head(Damage,10),names.arg = head(EVTYPE,10), las = 2, main = "Top 10 most Propdamage"))
+
+with(Cropdamage,barplot(head(Damage,10),names.arg = head(EVTYPE,10), las = 2,main = "Top 10 most Cropdamage"))
+
+
+# Aggregate the damage of property and crop damage by sum them together to get the total damage 
+totalDamage <- as.data.frame(cbind("EVTYPE"  = Propdamage$EVTYPE,"Damage" =  Propdamage$Damage + Cropdamage$Damage))
+
+# Since the as.data.frame turn the figure into string so we need to convert them into number
+totalDamage$Damage <- as.numeric(totalDamage$Damage)
+# sort them in decreasing order
+totalDamage <- arrange(totalDamage,desc(Damage))
+
+head(totalDamage)
+
+par(mfrow=c(1,1),mar=c(12,5,5,2))
+
+# show the top 10 most event that cause the total damage 
+with(totalDamage,barplot(head(Damage,10),names.arg = head(EVTYPE,10), las = 2,main = "Top 10 most damage"))
+
+
+```
